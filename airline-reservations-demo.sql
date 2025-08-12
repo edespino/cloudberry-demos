@@ -28,7 +28,7 @@ CREATE TABLE passenger (
     passenger_id SERIAL PRIMARY KEY,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
     phone TEXT
 )
 WITH (appendonly=true, orientation=row, compresstype=zstd, compresslevel=5)
@@ -107,17 +107,25 @@ FROM generate_series(1, 10000);
 -- Uses major US airport codes for realistic flight patterns
 INSERT INTO flights (flight_number, origin, destination, departure_time, arrival_time)
 SELECT 
-    'AA' || (1000 + (random() * 8999)::int)::text as flight_number,
-    (ARRAY['JFK', 'LAX', 'ORD', 'DFW', 'DEN', 'ATL', 'SFO', 'SEA', 'LAS', 'MCO',
-           'EWR', 'CLT', 'PHX', 'IAH', 'MIA', 'BOS', 'MSP', 'DTW', 'PHL', 'LGA',
-           'FLL', 'BWI', 'IAD', 'MDW', 'TPA', 'SAN', 'HNL', 'PDX', 'STL', 'AUS'])[1 + (random() * 29)::int] as origin,
-    (ARRAY['JFK', 'LAX', 'ORD', 'DFW', 'DEN', 'ATL', 'SFO', 'SEA', 'LAS', 'MCO',
-           'EWR', 'CLT', 'PHX', 'IAH', 'MIA', 'BOS', 'MSP', 'DTW', 'PHL', 'LGA',
-           'FLL', 'BWI', 'IAD', 'MDW', 'TPA', 'SAN', 'HNL', 'PDX', 'STL', 'AUS'])[1 + (random() * 29)::int] as destination,
-    CURRENT_DATE + (random() * 30)::int + (random() * 24)::int * INTERVAL '1 hour' as departure_time,
-    CURRENT_DATE + (random() * 30)::int + (random() * 24)::int * INTERVAL '1 hour' + 
-    (1 + random() * 8) * INTERVAL '1 hour' as arrival_time
-FROM generate_series(1, 750)
+    flight_number,
+    origin,
+    destination,
+    departure_time,
+    arrival_time
+FROM (
+    SELECT 
+        'AA' || (1000 + (random() * 8999)::int)::text as flight_number,
+        (ARRAY['JFK', 'LAX', 'ORD', 'DFW', 'DEN', 'ATL', 'SFO', 'SEA', 'LAS', 'MCO',
+               'EWR', 'CLT', 'PHX', 'IAH', 'MIA', 'BOS', 'MSP', 'DTW', 'PHL', 'LGA',
+               'FLL', 'BWI', 'IAD', 'MDW', 'TPA', 'SAN', 'HNL', 'PDX', 'STL', 'AUS'])[1 + (random() * 29)::int] as origin,
+        (ARRAY['JFK', 'LAX', 'ORD', 'DFW', 'DEN', 'ATL', 'SFO', 'SEA', 'LAS', 'MCO',
+               'EWR', 'CLT', 'PHX', 'IAH', 'MIA', 'BOS', 'MSP', 'DTW', 'PHL', 'LGA',
+               'FLL', 'BWI', 'IAD', 'MDW', 'TPA', 'SAN', 'HNL', 'PDX', 'STL', 'AUS'])[1 + (random() * 29)::int] as destination,
+        CURRENT_DATE + (random() * 30)::int + (random() * 24)::int * INTERVAL '1 hour' as departure_time,
+        CURRENT_DATE + (random() * 30)::int + (random() * 24)::int * INTERVAL '1 hour' + 
+        (1 + random() * 8) * INTERVAL '1 hour' as arrival_time
+    FROM generate_series(1, 750)
+) flight_data
 WHERE origin != destination; -- Ensure no same-city flights
 
 \echo 'Loaded 750 flights across major US airports over 30-day window'
@@ -132,7 +140,7 @@ SELECT
     (1 + (random() * 35)::int)::text as seat_number
 FROM passenger p
 CROSS JOIN LATERAL (
-    SELECT flight_id 
+    SELECT flight_id, departure_time 
     FROM flights 
     ORDER BY random() 
     LIMIT 1 + (random() * 2)::int  -- 1-3 bookings per passenger
