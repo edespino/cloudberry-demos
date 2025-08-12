@@ -1,0 +1,48 @@
+# Apache Cloudberry Demos - Git Ignore
+# =====================================
+
+# Generated data files
+load_passengers.sql
+load_flights.sql
+load_bookings.sql
+passengers.csv
+flights.csv
+bookings.csv
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
