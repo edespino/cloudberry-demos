@@ -27,7 +27,7 @@ NC='\033[0m' # No Color
 # Default database connection parameters
 DB_HOST=${CLOUDBERRY_HOST:-localhost}
 DB_PORT=${CLOUDBERRY_PORT:-5432}
-DB_NAME=${CLOUDBERRY_DB:-postgres}
+DB_NAME=${CLOUDBERRY_DB:-airline_demo}
 DB_USER=${CLOUDBERRY_USER:-postgres}
 
 print_banner() {
@@ -52,7 +52,7 @@ print_usage() {
     echo "Environment variables (optional):"
     echo "  CLOUDBERRY_HOST - Database host (default: localhost)"
     echo "  CLOUDBERRY_PORT - Database port (default: 5432)"
-    echo "  CLOUDBERRY_DB   - Database name (default: postgres)"
+    echo "  CLOUDBERRY_DB   - Database name (default: airline_demo)"
     echo "  CLOUDBERRY_USER - Database user (default: postgres)"
     echo ""
     echo "Examples:"
