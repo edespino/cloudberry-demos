@@ -78,6 +78,18 @@ This directory contains a comprehensive demonstration of **Apache Cloudberry (In
 - **Python**: 3.7+ for enhanced data generation
 - **Network**: Optional for OpenFlights data download
 
+### Environment Setup
+- **Development Environment**: Use gpdemo setup with port 7000
+  - Source environment: `source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh`
+  - Connection parameters: localhost:7000, database=airline_demo, user=cbadmin
+  - Database: Uses dedicated `airline_demo` database for clean separation
+- **Production Environment**: Use standard port 5432 with custom settings
+
+### Database Strategy
+- **Dedicated Database**: Uses `airline_demo` database instead of default `postgres`
+- **Benefits**: Clean separation, easy cleanup, no interference with other work
+- **Setup**: Auto-created by demo script or manually with `CREATE DATABASE airline_demo;`
+
 ## Educational Value & Learning Outcomes
 
 ### MPP Concepts Covered
@@ -143,12 +155,45 @@ This directory contains a comprehensive demonstration of **Apache Cloudberry (In
 - **Scalability**: Data generation scales to larger/smaller datasets
 - **Maintainability**: Easy to update and extend
 
+## Common Setup Issues & Solutions
+
+### Connection Problems
+1. **"Cannot connect to Apache Cloudberry"** - Check these settings:
+   - For gpdemo: Use port 7000, not 5432
+   - Ensure Cloudberry is running: `gpstate -s`
+   - Source environment: `source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh`
+   - Use correct user (typically system username, e.g., cbadmin)
+
+2. **Database not found** - demo uses dedicated 'airline_demo' database
+   - Connect to: `psql -h localhost -p 7000 -d airline_demo`
+   - Create if missing: `psql -d postgres -c "CREATE DATABASE airline_demo;"`
+
+3. **Authentication failed** - Use system username, not 'postgres'
+   - For gpdemo: `CLOUDBERRY_USER=cbadmin` (or current username)
+
+### Quick Verification Commands
+```bash
+# Check if Cloudberry is running
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh
+gpstate -s
+
+# Test connection
+psql -d postgres -c "SELECT version();"
+
+# Create demo database
+psql -d postgres -c "CREATE DATABASE airline_demo;"
+
+# Run demo with correct settings
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh enhanced
+```
+
 ## Notes for Claude
 - This demo showcases **defensive** database technology for analytics
 - All code is educational and demonstrates legitimate MPP database concepts
 - Data generation is synthetic/public domain with no privacy concerns
 - Focus on helping users understand Apache Cloudberry's capabilities
 - Encourage exploration of query optimization and performance tuning
+- Always verify Cloudberry environment setup before troubleshooting demo issues
 
 ---
 

@@ -33,6 +33,15 @@ All tables use:
 - **row orientation**: Suitable for mixed analytical queries
 - **Strategic distribution keys**: Balanced data distribution across segments
 
+## Database Setup
+
+The demo uses a dedicated `airline_demo` database to keep the demonstration isolated from your main work. This provides:
+
+- **Clean separation** from system databases
+- **Easy cleanup** - drop entire database when done
+- **No interference** with other work
+- **Clear demo environment** for testing and learning
+
 ## Quick Start
 
 ### 🚀 One-Command Demo (Recommended)
@@ -64,7 +73,9 @@ pip install -r requirements.txt
 python enhanced-data-loader.py
 
 # Connect to Apache Cloudberry and create schema
-psql -h localhost -p 5432 -d your_database
+# For gpdemo: psql -h localhost -p 7000 -d airline_demo
+# For production: psql -h localhost -p 5432 -d your_database
+psql -h localhost -p 7000 -d airline_demo
 \i airline-reservations-demo.sql
 
 # Load the realistic data  
@@ -76,7 +87,9 @@ psql -h localhost -p 5432 -d your_database
 #### Method 2: Self-Contained SQL Demo
 ```bash
 # Connect to your Apache Cloudberry instance
-psql -h localhost -p 5432 -d your_database
+# For gpdemo: psql -h localhost -p 7000 -d airline_demo
+# For production: psql -h localhost -p 5432 -d your_database
+psql -h localhost -p 7000 -d airline_demo
 
 # Run the complete demo with generated data
 \i airline-reservations-demo.sql
@@ -88,15 +101,37 @@ psql -h localhost -p 5432 -d your_database
 python data-generator.py
 
 # Load data into Cloudberry
-psql -h localhost -p 5432 -d your_database
+# For gpdemo: psql -h localhost -p 7000 -d airline_demo
+# For production: psql -h localhost -p 5432 -d your_database
+psql -h localhost -p 7000 -d airline_demo
 \COPY passenger FROM 'passengers.csv' CSV HEADER;
 \COPY flights FROM 'flights.csv' CSV HEADER; 
 \COPY booking FROM 'bookings.csv' CSV HEADER;
 ```
 
 ### Environment Configuration
+
+#### For Cloudberry Development Environment (gpdemo)
 ```bash
-# Optional: Set connection parameters
+# Source the Cloudberry demo environment
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh
+
+# Set correct connection parameters for gpdemo
+export CLOUDBERRY_HOST=localhost
+export CLOUDBERRY_PORT=7000  # gpdemo uses port 7000, not 5432
+export CLOUDBERRY_DB=airline_demo  # dedicated database for demo
+export CLOUDBERRY_USER=cbadmin  # or your system username
+
+# Create the database (first time only)
+psql -d postgres -c "CREATE DATABASE airline_demo;"
+
+# Then run demo
+./run-demo.sh enhanced
+```
+
+#### For Production/Custom Cloudberry Installation
+```bash
+# Set connection parameters for your installation
 export CLOUDBERRY_HOST=your-host
 export CLOUDBERRY_PORT=5432
 export CLOUDBERRY_DB=your-database
@@ -104,6 +139,12 @@ export CLOUDBERRY_USER=your-user
 
 # Then run demo
 ./run-demo.sh enhanced
+```
+
+#### Quick Start with gpdemo
+```bash
+# Create database and run demo in one command
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && psql -d postgres -c "CREATE DATABASE airline_demo;" && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh enhanced
 ```
 
 ## Key Demonstrations
@@ -153,15 +194,72 @@ WHERE flight_count > 1
 ORDER BY flight_count DESC;
 ```
 
-### 4. Optimizer Control
+### 4. Optimizer Control & Comparison
 ```sql
--- Demonstrate ORCA optimizer hints
-SET enable_indexscan = OFF;  -- Force sequential scan
-SET enable_seqscan = OFF;    -- Force index scan
-EXPLAIN SELECT * FROM passenger WHERE last_name = 'Smith';
+-- Compare ORCA vs PostgreSQL optimizer behavior
+-- First update table statistics (CRITICAL for accurate optimization)
+ANALYZE passenger;
+ANALYZE flights; 
+ANALYZE booking;
+
+-- ORCA optimizer (Apache Cloudberry default)
+SET optimizer = on;
+EXPLAIN SELECT b.booking_id, b.booking_date, b.seat_number,
+       f.origin, f.destination, f.departure_time
+FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
+
+-- PostgreSQL optimizer 
+SET optimizer = off;
+EXPLAIN SELECT b.booking_id, b.booking_date, b.seat_number,
+       f.origin, f.destination, f.departure_time
+FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
 ```
 
+**Expected Results After ANALYZE:**
+- **ORCA**: Uses Broadcast Motion for small flights table (~720 rows)
+- **PostgreSQL**: Similar strategy but different cost estimates  
+- **Both**: Accurate row estimates (30,000 final rows)
+- **Key**: Without ANALYZE, ORCA shows unrealistic "rows=1" estimates
+
 ## Apache Cloudberry MPP Features Highlighted
+
+### Critical: Table Statistics for Optimization
+```sql
+-- ALWAYS run ANALYZE after loading data for accurate query optimization
+ANALYZE passenger;
+ANALYZE flights; 
+ANALYZE booking;
+
+-- Check current statistics
+SELECT schemaname, tablename, n_distinct, correlation 
+FROM pg_stats 
+WHERE tablename IN ('passenger', 'flights', 'booking') 
+AND attname LIKE '%_id';
+```
+
+**Impact of ANALYZE:**
+- **Before ANALYZE**: ORCA shows "rows=1" estimates (inaccurate)
+- **After ANALYZE**: Both optimizers show realistic estimates (30,000 rows)
+- **Join Strategy**: Enables proper Motion operation selection (Broadcast vs Redistribute)
+
+### Motion Operation Strategies
+Apache Cloudberry automatically chooses optimal data movement patterns:
+
+**Broadcast Motion** (small table to all segments):
+```
+Broadcast Motion 3:3  -- Sends flights (720 rows) to all segments
+```
+- Used when one table is significantly smaller
+- Avoids redistributing large booking table (30,000 rows)
+- Optimal for small dimension tables joining to large fact tables
+
+**Redistribute Motion** (hash-based data movement):
+```  
+Redistribute Motion 3:3  -- Moves data by hash(join_key)
+```
+- Used when both tables are large
+- Ensures matching join keys end up on same segment
+- Required when tables have different distribution keys
 
 ### Distribution Strategy Impact
 - **Hash Distribution**: Even data spread across segments via hash functions
@@ -252,6 +350,123 @@ This demo serves as a comprehensive introduction to:
 - **Memory**: 4GB+ recommended for demo dataset
 - **Storage**: ~100MB for compressed demo data
 - **Segments**: Works with default configuration (adjust for larger deployments)
+
+## Best Practices for Apache Cloudberry
+
+### Essential Query Optimization Steps
+```sql
+-- 1. Always analyze tables after data loads
+ANALYZE passenger;
+ANALYZE flights;
+ANALYZE booking;
+
+-- 2. Monitor query execution plans
+EXPLAIN (ANALYZE, COSTS, VERBOSE) 
+SELECT * FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
+
+-- 3. Compare optimizers for complex queries
+SET optimizer = on;   -- ORCA (default)
+SET optimizer = off;  -- PostgreSQL planner
+```
+
+### Understanding Motion Operations
+- **Broadcast Motion**: Best for small dimension tables (<1000 rows)
+- **Redistribute Motion**: Required when joining tables with different distribution keys  
+- **Gather Motion**: Always present - collects final results to master node
+
+### Advanced MPP Query Demonstrations
+
+#### 1. Multi-Level Aggregation with GROUPING SETS
+```sql
+-- Shows complex cross-segment aggregation at multiple granularities
+EXPLAIN (ANALYZE, COSTS OFF)
+SELECT 
+    COALESCE(f.origin, 'ALL ORIGINS') as origin,
+    COALESCE(f.destination, 'ALL DESTINATIONS') as destination,
+    COUNT(*) as bookings,
+    AVG(EXTRACT(epoch FROM (f.arrival_time - f.departure_time))/3600) as avg_flight_hours
+FROM booking b 
+JOIN flights f ON b.flight_id = f.flight_id
+GROUP BY GROUPING SETS ((f.origin, f.destination), (f.origin), ())
+HAVING COUNT(*) > 100
+ORDER BY bookings DESC
+LIMIT 10;
+```
+
+**Key MPP Features Demonstrated:**
+- **Multiple Redistribute Motions**: Data reshuffled for different aggregation levels
+- **Shared Scans**: Same data read once, used for multiple aggregations
+- **Parallel GROUP BY**: Each segment processes partial aggregations
+- **Finalize Aggregate**: Master node combines segment results
+
+#### 2. Complex Window Functions with Multiple Partitions
+```sql
+-- Shows cross-segment window function processing with multiple redistribute operations
+EXPLAIN (ANALYZE, COSTS OFF)
+SELECT 
+    p.passenger_id,
+    p.first_name || ' ' || p.last_name as passenger_name,
+    COUNT(*) OVER (PARTITION BY p.passenger_id) as total_flights,
+    ROW_NUMBER() OVER (PARTITION BY f.origin ORDER BY f.departure_time) as departure_sequence,
+    LAG(f.destination) OVER (PARTITION BY p.passenger_id ORDER BY f.departure_time) as previous_destination
+FROM passenger p
+JOIN booking b ON p.passenger_id = b.passenger_id
+JOIN flights f ON b.flight_id = f.flight_id
+ORDER BY p.passenger_id, f.departure_time
+LIMIT 20;
+```
+
+**Key MPP Features Demonstrated:**
+- **Multiple Window Functions**: Each requiring different data partitioning
+- **Cascade of Redistribute Motions**: Data moved multiple times for different partitions
+- **Segment-Parallel Sorting**: Each segment sorts its portion independently
+- **Memory Management**: Work_mem allocation across multiple operations
+
+#### 3. Global Ranking Across All Segments
+```sql
+-- Demonstrates global ordering and ranking across distributed data
+EXPLAIN (ANALYZE, COSTS OFF)
+SELECT origin, destination, flight_count, 
+       DENSE_RANK() OVER (ORDER BY flight_count DESC) as popularity_rank,
+       PERCENT_RANK() OVER (ORDER BY flight_count) as percentile
+FROM (
+    SELECT f.origin, f.destination, COUNT(*) as flight_count
+    FROM flights f
+    JOIN booking b ON f.flight_id = b.flight_id  
+    GROUP BY f.origin, f.destination
+    HAVING COUNT(*) > 50
+) route_stats
+ORDER BY popularity_rank, flight_count DESC
+LIMIT 20;
+```
+
+**Key MPP Features Demonstrated:**
+- **Global Sorting**: Gather Motion with merge keys for distributed sorting
+- **Window Functions on Aggregates**: Ranking calculated after cross-segment aggregation
+- **Streaming Partial Aggregates**: Segments compute partial results, master finalizes
+
+### Performance Monitoring
+```sql
+-- Check data distribution across segments  
+SELECT gp_segment_id, count(*) 
+FROM gp_dist_random('booking') 
+GROUP BY gp_segment_id 
+ORDER BY gp_segment_id;
+
+-- View table compression effectiveness
+SELECT schemaname, tablename,
+       pg_size_pretty(pg_total_relation_size(tablename)) as total_size,
+       pg_size_pretty(pg_relation_size(tablename)) as table_size
+FROM pg_tables WHERE schemaname = 'public';
+
+-- Monitor slice execution and memory usage
+EXPLAIN (ANALYZE, VERBOSE) 
+SELECT f.origin, COUNT(*) 
+FROM flights f 
+JOIN booking b ON f.flight_id = b.flight_id 
+GROUP BY f.origin 
+ORDER BY COUNT(*) DESC;
+```
 
 ## Next Steps
 
