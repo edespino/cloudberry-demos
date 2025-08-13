@@ -71,12 +71,26 @@ class AirlineDataLoader:
                     city = fields[2].strip('"')
                     country = fields[3].strip('"')
                     
+                    # Parse coordinates safely
+                    def safe_float_parse(value):
+                        try:
+                            if value == '\\N' or not value:
+                                return 0.0
+                            # Remove quotes and try to convert
+                            clean_value = value.strip('"').strip("'")
+                            return float(clean_value)
+                        except (ValueError, TypeError):
+                            return 0.0
+                    
+                    lat = safe_float_parse(fields[6]) if len(fields) > 6 else 0.0
+                    lon = safe_float_parse(fields[7]) if len(fields) > 7 else 0.0
+                    
                     self.airports[iata] = {
                         'name': name,
                         'city': city,
                         'country': country,
-                        'lat': float(fields[6]) if fields[6] != '\\N' else 0,
-                        'lon': float(fields[7]) if fields[7] != '\\N' else 0
+                        'lat': lat,
+                        'lon': lon
                     }
                     
                     # Track US airports
@@ -292,8 +306,11 @@ class AirlineDataLoader:
                 counter += 1
             used_emails.add(email)
             
-            # Generate phone number
+            # Generate phone number (ensure consistent format)
             phone = fake.phone_number()
+            # Truncate if too long and ensure consistent format
+            if len(phone) > 40:
+                phone = f"+1-{random.randint(200,999)}-{random.randint(200,999)}-{random.randint(1000,9999)}"
             
             passengers.append({
                 'passenger_id': i,
@@ -314,20 +331,20 @@ class AirlineDataLoader:
         
         # Create booking patterns
         for passenger in passengers:
-            # Determine booking behavior (frequent vs occasional traveler)
+            # Determine booking behavior (more realistic distribution)
             traveler_type = random.choices(
                 ['frequent', 'business', 'leisure', 'occasional'],
-                weights=[0.05, 0.15, 0.6, 0.2]
+                weights=[0.02, 0.08, 0.4, 0.5]
             )[0]
             
             if traveler_type == 'frequent':
-                num_bookings = random.randint(5, 12)
+                num_bookings = random.randint(4, 8)
             elif traveler_type == 'business':
-                num_bookings = random.randint(3, 8)
+                num_bookings = random.randint(2, 4)
             elif traveler_type == 'leisure':
-                num_bookings = random.randint(1, 3)
-            else:  # occasional
                 num_bookings = random.randint(1, 2)
+            else:  # occasional
+                num_bookings = 1
             
             # Select flights for this passenger
             passenger_flights = random.sample(flights, min(num_bookings, len(flights)))
@@ -356,57 +373,64 @@ class AirlineDataLoader:
         return bookings
     
     def write_sql_files(self, passengers: List[Dict], flights: List[Dict], bookings: List[Dict]):
-        """Write data to SQL files for Cloudberry."""
+        """Write data to SQL files for Cloudberry with chunked loading for large datasets."""
         
-        # Write passengers
-        with open('load_passengers.sql', 'w') as f:
-            f.write("-- Apache Cloudberry (Incubating) - Load Passengers Data\n")
-            f.write("-- Generated from synthetic data using Faker library\n\n")
-            f.write("INSERT INTO passenger (passenger_id, first_name, last_name, email, phone) VALUES\n")
-            
-            passenger_values = []
-            for p in passengers:
-                values = f"({p['passenger_id']}, '{p['first_name']}', '{p['last_name']}', '{p['email']}', '{p['phone']}')"
-                passenger_values.append(values)
-            
-            f.write(',\n'.join(passenger_values))
-            f.write(';\n')
+        # Write passengers with chunking
+        self._write_chunked_sql('load_passengers.sql', passengers, 
+                               'passenger', 
+                               ['passenger_id', 'first_name', 'last_name', 'email', 'phone'],
+                               "Apache Cloudberry (Incubating) - Load Passengers Data\n-- Generated from synthetic data using Faker library")
         
-        # Write flights
-        with open('load_flights.sql', 'w') as f:
-            f.write("-- Apache Cloudberry (Incubating) - Load Flights Data\n")
-            f.write("-- Generated from OpenFlights route data with realistic scheduling\n\n")
-            f.write("INSERT INTO flights (flight_id, flight_number, origin, destination, departure_time, arrival_time) VALUES\n")
-            
-            flight_values = []
-            for flight in flights:
-                departure_str = flight['departure_time'].strftime('%Y-%m-%d %H:%M:%S')
-                arrival_str = flight['arrival_time'].strftime('%Y-%m-%d %H:%M:%S')
-                values = f"({flight['flight_id']}, '{flight['flight_number']}', '{flight['origin']}', '{flight['destination']}', '{departure_str}', '{arrival_str}')"
-                flight_values.append(values)
-            
-            f.write(',\n'.join(flight_values))
-            f.write(';\n')
+        # Write flights with chunking  
+        self._write_chunked_sql('load_flights.sql', flights,
+                               'flights',
+                               ['flight_id', 'flight_number', 'origin', 'destination', 'departure_time', 'arrival_time'],
+                               "Apache Cloudberry (Incubating) - Load Flights Data\n-- Generated from OpenFlights route data with realistic scheduling")
         
-        # Write bookings
-        with open('load_bookings.sql', 'w') as f:
-            f.write("-- Apache Cloudberry (Incubating) - Load Bookings Data\n")
-            f.write("-- Generated with realistic booking patterns and lead times\n\n")
-            f.write("INSERT INTO booking (booking_id, passenger_id, flight_id, booking_date, seat_number) VALUES\n")
-            
-            booking_values = []
-            for booking in bookings:
-                booking_date_str = booking['booking_date'].strftime('%Y-%m-%d %H:%M:%S')
-                values = f"({booking['booking_id']}, {booking['passenger_id']}, {booking['flight_id']}, '{booking_date_str}', '{booking['seat_number']}')"
-                booking_values.append(values)
-            
-            f.write(',\n'.join(booking_values))
-            f.write(';\n')
+        # Write bookings with chunking (most critical for memory)
+        self._write_chunked_sql('load_bookings.sql', bookings,
+                               'booking', 
+                               ['booking_id', 'passenger_id', 'flight_id', 'booking_date', 'seat_number'],
+                               "Apache Cloudberry (Incubating) - Load Bookings Data\n-- Generated with realistic booking patterns and lead times")
         
-        print(f"Generated SQL files:")
+        print(f"Generated SQL files with chunked loading:")
         print(f"  - load_passengers.sql ({len(passengers)} rows)")
         print(f"  - load_flights.sql ({len(flights)} rows)")  
         print(f"  - load_bookings.sql ({len(bookings)} rows)")
+    
+    def _write_chunked_sql(self, filename: str, data: List[Dict], table_name: str, columns: List[str], header_comment: str):
+        """Write SQL file with chunked INSERT statements to prevent memory issues."""
+        chunk_size = 25000  # Larger chunks for faster loading while avoiding memory issues
+        
+        with open(filename, 'w') as f:
+            f.write(f"-- {header_comment}\n")
+            f.write(f"-- Chunked loading for memory efficiency\n\n")
+            
+            # Process data in chunks
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i:i + chunk_size]
+                
+                # Write chunk header
+                f.write(f"-- Chunk {i//chunk_size + 1}: rows {i+1} to {min(i+chunk_size, len(data))}\n")
+                f.write(f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES\n")
+                
+                # Generate values for this chunk
+                chunk_values = []
+                for item in chunk:
+                    if table_name == 'passenger':
+                        values = f"({item['passenger_id']}, '{item['first_name']}', '{item['last_name']}', '{item['email']}', '{item['phone']}')"
+                    elif table_name == 'flights':
+                        departure_str = item['departure_time'].strftime('%Y-%m-%d %H:%M:%S')
+                        arrival_str = item['arrival_time'].strftime('%Y-%m-%d %H:%M:%S')
+                        values = f"({item['flight_id']}, '{item['flight_number']}', '{item['origin']}', '{item['destination']}', '{departure_str}', '{arrival_str}')"
+                    elif table_name == 'booking':
+                        booking_date_str = item['booking_date'].strftime('%Y-%m-%d %H:%M:%S')
+                        values = f"({item['booking_id']}, {item['passenger_id']}, {item['flight_id']}, '{booking_date_str}', '{item['seat_number']}')"
+                    
+                    chunk_values.append(values)
+                
+                f.write(',\n'.join(chunk_values))
+                f.write(';\n\n')
 
 def main():
     """Main execution function."""

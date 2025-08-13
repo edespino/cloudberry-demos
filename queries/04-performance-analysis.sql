@@ -7,15 +7,25 @@
 \echo 'Apache Cloudberry Performance Analysis'
 \echo '======================================'
 
-\echo 'Table Statistics and Size Information:'
-\echo '====================================='
+\echo 'Table Row Counts:'
+\echo '================='
 
--- Check table sizes and statistics
+-- Basic table row counts
+SELECT 'passenger' as table_name, COUNT(*) as row_count FROM passenger
+UNION ALL
+SELECT 'flights', COUNT(*) FROM flights  
+UNION ALL
+SELECT 'booking', COUNT(*) FROM booking
+ORDER BY table_name;
+
+\echo ''
+\echo 'Table Statistics and Maintenance:'
+\echo '================================='
+
+-- Check table statistics (simplified for Cloudberry compatibility)
 SELECT 
     schemaname,
-    tablename,
-    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as total_size,
-    pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) as table_size,
+    relname as tablename,
     n_tup_ins as rows_inserted,
     n_tup_upd as rows_updated,
     n_tup_del as rows_deleted,
@@ -23,7 +33,7 @@ SELECT
     analyze_count
 FROM pg_stat_user_tables 
 WHERE schemaname = 'public'
-ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+ORDER BY relname;
 
 \echo ''
 \echo 'Data Distribution Across Segments:'
@@ -54,8 +64,8 @@ ORDER BY gp_segment_id;
 \echo 'Column Statistics Quality:'
 \echo '========================='
 
--- Check statistics quality for key columns
-SELECT tablename, attname, n_distinct, correlation, most_common_vals[1:3] as top_values
+-- Check statistics quality for key columns (simplified for Cloudberry)
+SELECT tablename, attname, n_distinct, correlation
 FROM pg_stats 
 WHERE schemaname = 'public'
   AND tablename IN ('passenger', 'flights', 'booking') 

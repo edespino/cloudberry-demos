@@ -165,10 +165,16 @@ run_enhanced_demo() {
         exit 1
     fi
     
-    # Create schema and load data
+    # Create schema only (no embedded data)
     echo -e "${YELLOW}Creating schema in Apache Cloudberry...${NC}"
     psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-         -f airline-reservations-demo.sql \
+         -f airline-schema-only.sql \
+         -v ON_ERROR_STOP=1
+    
+    # Clean existing data to prevent duplicates
+    echo -e "${YELLOW}Cleaning existing data...${NC}"
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+         -c "TRUNCATE TABLE booking, flights, passenger CASCADE;" \
          -v ON_ERROR_STOP=1
     
     if [ -f "load_passengers.sql" ] && [ -f "load_flights.sql" ] && [ -f "load_bookings.sql" ]; then

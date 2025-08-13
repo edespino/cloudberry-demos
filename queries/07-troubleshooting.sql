@@ -12,9 +12,12 @@
 
 -- Check segment configuration and status
 \echo 'Segment configuration:'
-SELECT content, role, preferred_role, mode, status, hostname, port
-FROM gp_configuration
-WHERE content >= 0
+SELECT content, hostname, port, 
+       CASE WHEN role = 'p' THEN 'primary' ELSE 'mirror' END as role_type,
+       CASE WHEN status = 'u' THEN 'up' ELSE 'down' END as status,
+       mode
+FROM gp_segment_configuration
+WHERE content >= 0  -- Exclude master (-1)
 ORDER BY content;
 
 \echo ''
@@ -24,9 +27,8 @@ ORDER BY content;
 -- Check when tables were last analyzed
 SELECT 
     schemaname,
-    tablename,
+    relname as tablename,
     last_analyze,
-    last_autoanalyze,
     analyze_count,
     CASE 
         WHEN last_analyze IS NULL THEN 'NEVER ANALYZED'
@@ -149,7 +151,7 @@ ORDER BY COUNT(*) DESC;
 
 -- 1. Missing statistics
 WITH missing_stats AS (
-    SELECT tablename 
+    SELECT relname as tablename 
     FROM pg_stat_user_tables 
     WHERE schemaname = 'public' 
     AND (last_analyze IS NULL OR analyze_count = 0)
@@ -162,7 +164,7 @@ FROM missing_stats;
 
 -- 2. Check for very old statistics
 WITH stale_stats AS (
-    SELECT tablename 
+    SELECT relname as tablename 
     FROM pg_stat_user_tables 
     WHERE schemaname = 'public' 
     AND last_analyze < now() - interval '1 day'
@@ -210,7 +212,9 @@ SELECT
         WHEN 'work_mem' THEN 'Per-operation memory limit'
         WHEN 'shared_buffers' THEN 'Shared cache size'
         WHEN 'gp_vmem_protect_limit' THEN 'Per-segment memory limit'
-        ELSE description
+        WHEN 'max_connections' THEN 'Maximum concurrent connections'
+        WHEN 'effective_cache_size' THEN 'Planner cache size estimate'
+        ELSE 'Memory-related setting'
     END as purpose
 FROM pg_settings 
 WHERE name LIKE '%mem%' 

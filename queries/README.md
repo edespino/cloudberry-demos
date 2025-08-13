@@ -75,14 +75,14 @@ psql -h localhost -p 5432 -d airline_demo  # production
 
 **Best For**: Business analytics, operational insights, strategic planning
 
-### 🎯 **06-pg-hint-plan.sql** - Query Optimization
-**Purpose**: Control query execution with pg_hint_plan extension  
+### 🎯 **06-orca-optimizer.sql** - ORCA Optimizer Control
+**Purpose**: Demonstrate ORCA optimizer features and controls  
 **Key Features**:
-- Join method control (HashJoin, NestLoop)
-- Scan method optimization (SeqScan, IndexScan)
-- Join order control with Leading hints
-- Performance comparison with/without hints
-- Best practices and usage guidelines
+- ORCA vs PostgreSQL planner comparison
+- Motion operations analysis and statistics quality
+- Best practices for ORCA optimization
+- Segment distribution analysis
+- Configuration settings and statistics
 
 **Best For**: Performance tuning, troubleshooting specific queries
 
@@ -120,7 +120,7 @@ psql -h localhost -p 5432 -d airline_demo  # production
 \i queries/04-performance-analysis.sql
 
 # Test optimization techniques
-\i queries/06-pg-hint-plan.sql
+\i queries/06-orca-optimizer.sql
 ```
 
 ### For Business Analytics:
