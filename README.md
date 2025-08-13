@@ -112,6 +112,27 @@ psql -h localhost -p 7000 -d airline_demo
 \COPY booking FROM 'bookings.csv' CSV HEADER;
 ```
 
+### Exploring Apache Cloudberry Features
+
+Once your data is loaded, explore Apache Cloudberry's MPP capabilities with our ready-to-run query collections:
+
+```bash
+# Connect to the demo database
+psql -h localhost -p 7000 -d airline_demo  # gpdemo
+psql -h localhost -p 5432 -d airline_demo  # production
+
+# Explore MPP join processing
+\i queries/01-mpp-joins.sql
+
+# Try advanced analytics
+\i queries/05-advanced-analytics.sql
+
+# Compare ORCA vs PostgreSQL optimizers
+\i queries/03-optimizer-comparison.sql
+```
+
+**📁 Complete Query Reference**: See the [Query Collections](#ready-to-run-query-collections) section below for all available demonstrations.
+
 ### Environment Configuration
 
 #### For Cloudberry Development Environment (gpdemo)
@@ -198,9 +219,42 @@ DEMO_SCALE=15 ./run-demo.sh --method enhanced
 CLOUDBERRY_HOST=myhost ./run-demo.sh -m enhanced -s 5
 ```
 
+## Ready-to-Run Query Collections
+
+The `queries/` directory contains comprehensive SQL demonstrations organized by feature area. Each file includes detailed examples with explanations and can be run directly in your Apache Cloudberry environment.
+
+### 🚀 Quick Query Access
+```bash
+# Connect to your demo database
+psql -h localhost -p 7000 -d airline_demo  # gpdemo
+psql -h localhost -p 5432 -d airline_demo  # production
+
+# Run any query collection
+\i queries/01-mpp-joins.sql
+\i queries/02-window-functions.sql
+\i queries/05-advanced-analytics.sql
+```
+
+### 📁 Query Collections
+
+| File | Focus Area | Key Features |
+|------|------------|--------------|
+| **01-mpp-joins.sql** | MPP Join Processing | Motion operations, distributed joins, parallel execution |
+| **02-window-functions.sql** | Analytics & Window Functions | Rankings, running totals, passenger journey analysis |
+| **03-optimizer-comparison.sql** | ORCA vs PostgreSQL | Performance comparison, optimizer behavior |
+| **04-performance-analysis.sql** | System Performance | Health monitoring, data distribution, benchmarks |
+| **05-advanced-analytics.sql** | Business Intelligence | Network analysis, passenger segmentation, profitability |
+| **06-pg-hint-plan.sql** | Query Optimization | Manual query tuning, execution plan control |
+| **07-troubleshooting.sql** | Diagnostics & Health | Issue diagnosis, system monitoring, quick fixes |
+
+### 📖 Detailed Query Guide
+See [`queries/README.md`](queries/README.md) for comprehensive documentation of all query collections, usage patterns, and best practices.
+
 ## Key Demonstrations
 
 ### 1. MPP Join Processing
+*Full demonstrations available in [`queries/01-mpp-joins.sql`](queries/01-mpp-joins.sql)*
+
 ```sql
 -- Shows Motion operations and parallel execution
 EXPLAIN (COSTS OFF, VERBOSE)
