@@ -215,11 +215,24 @@ EXPLAIN SELECT b.booking_id, b.booking_date, b.seat_number,
 FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
 ```
 
-**Expected Results After ANALYZE:**
-- **ORCA**: Uses Broadcast Motion for small flights table (~720 rows)
-- **PostgreSQL**: Similar strategy but different cost estimates  
-- **Both**: Accurate row estimates (30,000 final rows)
-- **Key**: Without ANALYZE, ORCA shows unrealistic "rows=1" estimates
+**Key Findings from Testing:**
+- **ORCA**: Uses Broadcast Motion for small flights table (~720 rows), sophisticated cost-based decisions
+- **PostgreSQL**: Similar strategy but different cost estimates, more responsive to manual hints
+- **Both**: Accurate row estimates (30,000 final rows) ONLY after ANALYZE
+- **Critical**: Without ANALYZE, ORCA shows unrealistic "rows=1" estimates leading to poor plans
+
+**ORCA vs Manual Control:**
+```sql
+-- Traditional hints work with PostgreSQL planner
+SET optimizer = off;
+SET enable_hashjoin = off;  -- ✅ Forces Nested Loop
+SET enable_nestloop = on;
+
+-- But are largely ignored by ORCA  
+SET optimizer = on;
+SET enable_hashjoin = off;  -- ❌ Still uses Hash Join
+-- ORCA trusts its cost model over manual overrides
+```
 
 ## Apache Cloudberry MPP Features Highlighted
 
@@ -374,6 +387,156 @@ SET optimizer = off;  -- PostgreSQL planner
 - **Redistribute Motion**: Required when joining tables with different distribution keys  
 - **Gather Motion**: Always present - collects final results to master node
 
+## ORCA Optimizer Best Practices
+
+### What Works: Data-Driven Optimization
+```sql
+-- 1. ALWAYS update statistics - Most critical for ORCA performance
+ANALYZE passenger;
+ANALYZE flights; 
+ANALYZE booking;
+
+-- 2. Check statistics quality
+SELECT schemaname, tablename, attname, n_distinct, correlation
+FROM pg_stats 
+WHERE tablename IN ('passenger', 'flights', 'booking') 
+AND attname IN ('passenger_id', 'flight_id', 'booking_id');
+
+-- 3. Monitor optimizer decisions
+EXPLAIN (ANALYZE, VERBOSE) your_query_here;
+```
+
+### What Doesn't Work: Manual Optimizer Controls
+**ORCA largely ignores traditional PostgreSQL optimizer hints:**
+```sql
+-- These have LIMITED effect with ORCA (optimizer = on)
+SET enable_hashjoin = off;  -- ❌ Usually ignored
+SET enable_nestloop = on;   -- ❌ Usually ignored  
+SET enable_seqscan = off;   -- ❌ Usually ignored
+
+-- ORCA trusts its cost-based decisions over manual overrides
+```
+
+### Schema Design for ORCA Optimization
+
+#### 1. Distribution Key Selection
+```sql
+-- ✅ Good: Distribute by join keys
+CREATE TABLE booking (...) DISTRIBUTED BY (flight_id);  -- Joins with flights
+CREATE TABLE passenger (...) DISTRIBUTED BY (passenger_id);  -- Joins with booking
+
+-- ❌ Bad: Random distribution for frequently joined tables  
+CREATE TABLE booking (...) DISTRIBUTED RANDOMLY;
+```
+
+#### 2. Table Storage Optimization
+```sql
+-- ✅ Appendonly + compression for analytical workloads
+CREATE TABLE large_fact_table (...) 
+WITH (appendonly=true, compresstype=zstd, compresslevel=5)
+DISTRIBUTED BY (primary_key);
+
+-- ✅ Heap tables for frequent updates
+CREATE TABLE lookup_table (...) 
+WITH (appendonly=false)  
+DISTRIBUTED BY (lookup_key);
+```
+
+#### 3. Index Strategy
+```sql
+-- ✅ Index on distribution key + filter columns
+CREATE INDEX idx_passenger_name ON passenger (passenger_id, last_name);
+
+-- ✅ Partial indexes for selective filters
+CREATE INDEX idx_premium_bookings ON booking (passenger_id) 
+WHERE seat_number LIKE 'A%';
+```
+
+### Query Structure for MPP Performance
+
+#### 1. Write MPP-Friendly Queries
+```sql
+-- ✅ Good: Filters applied early, clear join conditions
+SELECT p.first_name, p.last_name, COUNT(*) as flight_count
+FROM passenger p
+JOIN booking b ON p.passenger_id = b.passenger_id  -- Clear equi-join
+JOIN flights f ON b.flight_id = f.flight_id        -- Clear equi-join  
+WHERE f.departure_time >= CURRENT_DATE              -- Early filtering
+GROUP BY p.passenger_id, p.first_name, p.last_name -- Group by distribution key
+HAVING COUNT(*) > 2;                                -- Post-aggregation filter
+
+-- ❌ Bad: Complex expressions in joins, late filtering
+SELECT p.first_name, p.last_name, COUNT(*)
+FROM passenger p, booking b, flights f
+WHERE p.passenger_id::text = b.passenger_id::text   -- Type conversion in join
+AND b.flight_id = f.flight_id
+AND EXTRACT(year FROM f.departure_time) = 2025;     -- Function in WHERE
+```
+
+#### 2. Leverage ORCA's Strengths
+```sql
+-- ✅ Complex analytical queries - ORCA excels here
+WITH passenger_stats AS (
+  SELECT passenger_id, COUNT(*) as booking_count,
+         AVG(EXTRACT(epoch FROM f.departure_time - b.booking_date)/86400) as avg_lead_days
+  FROM booking b 
+  JOIN flights f ON b.flight_id = f.flight_id
+  GROUP BY passenger_id
+),
+route_popularity AS (
+  SELECT origin, destination, COUNT(*) as route_bookings
+  FROM flights f JOIN booking b ON f.flight_id = b.flight_id
+  GROUP BY origin, destination  
+)
+SELECT p.first_name, p.last_name, ps.booking_count, ps.avg_lead_days
+FROM passenger p
+JOIN passenger_stats ps ON p.passenger_id = ps.passenger_id
+WHERE ps.booking_count > (SELECT AVG(booking_count) FROM passenger_stats);
+```
+
+### Monitoring ORCA Performance
+
+#### 1. Execution Plan Analysis
+```sql
+-- Check for optimal Motion operations
+EXPLAIN (ANALYZE, COSTS OFF, VERBOSE)
+SELECT f.origin, COUNT(*) 
+FROM flights f JOIN booking b ON f.flight_id = b.flight_id
+GROUP BY f.origin;
+
+-- Look for:
+-- ✅ Broadcast Motion for small tables (flights: 720 rows)
+-- ✅ Redistribute Motion for balanced joins
+-- ✅ Efficient slice allocation and memory usage
+```
+
+#### 2. Statistics Health Check  
+```sql
+-- Verify statistics are current
+SELECT schemaname, tablename, 
+       pg_stat_get_last_analyze_time(c.oid) as last_analyze
+FROM pg_class c 
+JOIN pg_namespace n ON c.relnamespace = n.oid
+JOIN pg_tables t ON c.relname = t.tablename AND n.nspname = t.schemaname
+WHERE schemaname = 'public'
+ORDER BY last_analyze DESC;
+```
+
+#### 3. Query Performance Comparison
+```sql
+-- Compare ORCA vs PostgreSQL planner for complex queries
+SET optimizer = on;   -- ORCA
+EXPLAIN (ANALYZE) your_complex_query;
+
+SET optimizer = off;  -- PostgreSQL planner  
+EXPLAIN (ANALYZE) your_complex_query;
+
+-- ORCA typically wins on:
+-- • Complex joins (3+ tables)
+-- • Advanced analytics (window functions, CTEs)
+-- • Large data aggregations
+```
+
 ### Advanced MPP Query Demonstrations
 
 #### 1. Multi-Level Aggregation with GROUPING SETS
@@ -468,9 +631,155 @@ GROUP BY f.origin
 ORDER BY COUNT(*) DESC;
 ```
 
+## Advanced Query Optimization with pg_hint_plan
+
+### pg_hint_plan Extension Support (✅ Confirmed Working)
+
+Apache Cloudberry includes **pg_hint_plan v1.3.9** extension support for fine-grained query optimization control:
+
+**Version Details:**
+- **pg_hint_plan**: 1.3.9 (PostgreSQL 14 compatible)
+- **Apache Cloudberry**: 2.0.0-incubating 
+- **PostgreSQL Base**: 14.4
+- **Installation**: Pre-installed and configured in shared_preload_libraries
+
+#### Key Features Verified:
+- **Scan Method Hints**: `SeqScan`, `IndexScan`, `BitmapScan` - ✅ Working
+- **Join Method Hints**: `NestLoop`, `HashJoin`, `MergeJoin` - ✅ Working  
+- **Both Optimizers**: Works with ORCA and PostgreSQL planner - ✅ Working
+- **Error Handling**: Clear syntax error messages - ✅ Working
+- **Debug Output**: Available via `pg_hint_plan.debug_print` - ✅ Working
+
+#### Basic Usage Examples (CRITICAL: Single-line format required):
+```sql
+-- ✅ CORRECT: Single-line format
+/*+ SeqScan(passenger) */ SELECT * FROM passenger WHERE passenger_id = 1000;
+
+-- ✅ CORRECT: Join hints  
+/*+ NestLoop(b f) */ SELECT * FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
+
+-- ❌ INCORRECT: Multi-line format fails in psql -c
+/*+ SeqScan(passenger) */ 
+SELECT * FROM passenger WHERE passenger_id = 1000;
+```
+
+#### Advanced Usage Patterns:
+
+**Force Specific Scan Methods:**
+```sql
+-- Force sequential scan on flights table
+/*+ SeqScan(f) */ 
+SELECT * FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
+
+-- Force index scan (when available and beneficial)
+/*+ IndexScan(f) */ 
+SELECT * FROM flights f WHERE flight_id = 100;
+```
+
+**Control Join Algorithms:**
+```sql
+-- Force Hash Join (good for large datasets)
+/*+ HashJoin(b f) */ 
+SELECT * FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
+
+-- Force Merge Join (when inputs can be sorted)  
+/*+ MergeJoin(b f) */ 
+SELECT * FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
+```
+
+**Steer Join Order (Critical for Multi-table BI Queries):**
+```sql
+-- Force booking-flights join first, then passenger
+/*+ Leading((b f)) */ 
+SELECT b.booking_id, f.flight_number, p.first_name 
+FROM booking b 
+JOIN flights f ON b.flight_id = f.flight_id 
+JOIN passenger p ON b.passenger_id = p.passenger_id;
+
+-- Natural order vs forced order comparison shows dramatic plan differences
+```
+
+**Subquery-Specific Optimization:**
+```sql
+-- Apply hints to specific parts of complex queries
+/*+ NestLoop(b f) */ 
+SELECT * FROM (
+  SELECT * FROM booking b 
+  WHERE booking_date >= CURRENT_DATE - INTERVAL '30 days'
+) recent 
+JOIN flights f ON recent.flight_id = f.flight_id;
+```
+
+#### Comprehensive Demonstration Commands:
+```bash
+# Test scan method hints
+psql -d airline_demo -c "/*+ SeqScan(passenger) */ EXPLAIN SELECT * FROM passenger WHERE passenger_id = 1000;"
+
+# Test join method hints  
+psql -d airline_demo -c "/*+ NestLoop(b f) */ EXPLAIN SELECT b.booking_id, f.flight_number FROM booking b JOIN flights f ON b.flight_id = f.flight_id LIMIT 5;"
+
+# Test join order control (Leading hint)
+psql -d airline_demo -c "/*+ Leading((b f)) */ EXPLAIN (COSTS OFF) SELECT b.booking_id, f.flight_number, p.first_name FROM booking b JOIN flights f ON b.flight_id = f.flight_id JOIN passenger p ON b.passenger_id = p.passenger_id LIMIT 5;"
+
+# Test subquery optimization  
+psql -d airline_demo -c "/*+ NestLoop(b f) */ EXPLAIN (COSTS OFF) SELECT * FROM (SELECT * FROM booking b WHERE booking_date >= CURRENT_DATE - INTERVAL '30 days') recent JOIN flights f ON recent.flight_id = f.flight_id LIMIT 5;"
+
+# Compare optimizers with same hint
+psql -d airline_demo -c "SET optimizer = on; /*+ HashJoin(b f) */ EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM booking b JOIN flights f ON b.flight_id = f.flight_id;"
+psql -d airline_demo -c "SET optimizer = off; /*+ HashJoin(b f) */ EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM booking b JOIN flights f ON b.flight_id = f.flight_id;"
+
+# Test error handling
+psql -d airline_demo -c "/*+ InvalidHint(b f) */ EXPLAIN SELECT * FROM booking b JOIN flights f ON b.flight_id = f.flight_id;" 2>&1
+```
+
+#### Configuration Parameters:
+```sql
+-- Core settings (current values in Apache Cloudberry)
+SHOW pg_hint_plan.enable_hint;                -- on (hints are active)
+SHOW pg_hint_plan.debug_print;                -- off (can be enabled for debugging)
+SHOW pg_hint_plan.enable_hint_table;          -- off (hint table feature disabled)
+SHOW pg_hint_plan.message_level;              -- log (debug message level)  
+SHOW pg_hint_plan.parse_messages;             -- info (parse error message level)
+
+-- Enable debug output (shows hint processing in server logs)
+SET pg_hint_plan.debug_print = on;
+
+-- Verify extension is loaded and check version
+SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_hint_plan';
+-- Returns: pg_hint_plan | 1.3.9
+```
+
+#### Key Findings from Testing:
+
+**✅ What Works Exceptionally Well:**
+- **Scan Method Control**: SeqScan, IndexScan hints work reliably
+- **Join Algorithm Control**: HashJoin, NestLoop, MergeJoin hints effective
+- **Join Order Control**: Leading hints provide powerful multi-table query optimization
+- **Cross-Optimizer Support**: Same hints work with both ORCA and PostgreSQL planner
+- **Subquery Scope**: Hints can target specific parts of complex nested queries
+- **Error Reporting**: Clear, helpful syntax error messages
+
+**❌ Limitations Discovered:**
+- **Execution Format**: MUST use single-line format for psql -c commands
+- **Rows Hint**: Row count estimation hints may use different syntax in v1.3.9
+- **Hint Table**: Hint table feature disabled by default (enable_hint_table = off)
+
+**🎯 Best Use Cases:**
+- **Complex BI Queries**: Multi-table joins where join order matters significantly
+- **Performance Troubleshooting**: Force different execution strategies for comparison  
+- **Workload Tuning**: Override optimizer decisions for specific query patterns
+- **ETL Optimization**: Control resource usage in data processing pipelines
+
+**Performance Impact**: pg_hint_plan provides surgical control over execution plans, especially useful for:
+- Complex analytical queries where ORCA needs guidance
+- Workload-specific optimizations  
+- Performance troubleshooting and plan comparison
+- Critical production queries requiring consistent execution plans
+
 ## Next Steps
 
 After running this demo, explore:
+- **pg_hint_plan**: Advanced query optimization with surgical hint control
 - **Columnar Storage**: Try `orientation=column` for wider analytical tables
 - **Partitioning**: Implement date-based partitioning for time-series data  
 - **External Tables**: Connect to external data sources
