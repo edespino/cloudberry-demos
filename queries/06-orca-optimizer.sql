@@ -150,6 +150,8 @@ WHERE f.departure_time >= CURRENT_DATE
 
 -- Show ORCA-related configuration
 \echo 'Key ORCA settings:'
+\echo 'SQL: SELECT name, setting, short_desc FROM pg_settings WHERE name LIKE ''%optimizer%'' OR name LIKE ''%orca%'' ORDER BY name;'
+\echo ''
 SELECT name, setting, short_desc
 FROM pg_settings 
 WHERE name LIKE '%optimizer%' 
