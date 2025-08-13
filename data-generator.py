@@ -7,12 +7,17 @@ This script generates realistic CSV data for the airline reservations demo.
 It creates three files that can be loaded into Apache Cloudberry using \COPY commands.
 
 Usage:
-    python data-generator.py
+    python data-generator.py [--scale SCALE]
     
-Output Files:
+Output Files (at default scale=1):
     - passengers.csv (10,000 rows)
     - flights.csv (750 rows) 
     - bookings.csv (~15,000 rows)
+    
+Scaling:
+    --scale 1   - Standard demo (10K passengers, 750 flights)
+    --scale 5   - Medium scale (50K passengers, 3750 flights)
+    --scale 10  - Large scale (100K passengers, 7500 flights)
 
 Features:
 - Realistic airport codes from major US airports
@@ -210,26 +215,43 @@ def write_csv(filename: str, headers: List[str], data: List[Tuple]):
 
 def main():
     """Generate all CSV files for the airline demo."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Apache Cloudberry Airline Demo Data Generator')
+    parser.add_argument('--scale', type=int, default=1,
+                       help='Scale factor for data generation (default: 1)')
+    args = parser.parse_args()
+    
+    # Validate scale factor
+    if args.scale < 1 or args.scale > 1000:
+        print(f"Error: Scale factor must be between 1 and 1000 (got: {args.scale})")
+        return 1
+    
     print("Apache Cloudberry (Incubating) - Airline Demo Data Generator")
     print("=" * 60)
+    print(f"Scale factor: {args.scale}x")
+    
+    # Calculate scaled data sizes
+    passengers_count = args.scale * 10000
+    flights_count = args.scale * 750
     
     # Generate passengers
-    print("Generating passenger data...")
-    passengers = generate_passengers(10000)
+    print(f"Generating passenger data ({passengers_count} records)...")
+    passengers = generate_passengers(passengers_count)
     write_csv('passengers.csv', 
               ['passenger_id', 'first_name', 'last_name', 'email', 'phone'], 
               passengers)
     
     # Generate flights
-    print("Generating flight data...")
-    flights = generate_flights(750)
+    print(f"Generating flight data ({flights_count} records)...")
+    flights = generate_flights(flights_count)
     write_csv('flights.csv',
               ['flight_id', 'flight_number', 'origin', 'destination', 'departure_time', 'arrival_time'],
               flights)
     
     # Generate bookings
-    print("Generating booking data...")
-    bookings = generate_bookings(10000, flights)
+    print(f"Generating booking data...")
+    bookings = generate_bookings(passengers_count, flights)
     write_csv('bookings.csv',
               ['booking_id', 'passenger_id', 'flight_id', 'booking_date', 'seat_number'],
               bookings)

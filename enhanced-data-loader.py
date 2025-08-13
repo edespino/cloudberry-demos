@@ -15,7 +15,13 @@ Data Sources:
 
 Usage:
     pip install requests pandas faker
-    python enhanced-data-loader.py
+    python enhanced-data-loader.py [--scale SCALE]
+
+Scaling Options:
+    --scale 1   - Standard demo (10K passengers, 1K flights)
+    --scale 5   - Medium scale (50K passengers, 5K flights)  
+    --scale 25  - Large scale (250K passengers, 25K flights)
+    --scale 100 - Enterprise scale (1M passengers, 100K flights)
 
 Output:
 - Creates SQL files ready for Apache Cloudberry
@@ -404,12 +410,25 @@ class AirlineDataLoader:
 
 def main():
     """Main execution function."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Apache Cloudberry Enhanced Airline Demo Data Loader')
+    parser.add_argument('--scale', type=int, default=1, 
+                       help='Scale factor for data generation (default: 1)')
+    args = parser.parse_args()
+    
+    # Validate scale factor
+    if args.scale < 1 or args.scale > 1000:
+        print(f"Error: Scale factor must be between 1 and 1000 (got: {args.scale})")
+        return 1
+    
     print("Apache Cloudberry (Incubating) - Enhanced Airline Demo Data Loader")
     print("=" * 70)
     print("Using real-world datasets for maximum realism:")
     print("- OpenFlights.org for airport and route data")
     print("- Faker library for synthetic passenger data (no PII)")
     print("- Realistic booking patterns and flight scheduling")
+    print(f"- Scale factor: {args.scale}x")
     print()
     
     try:
@@ -418,13 +437,17 @@ def main():
         # Download and process open-source data
         loader.download_openflights_data()
         
+        # Calculate scaled data sizes
+        flights_count = args.scale * 1000
+        passengers_count = args.scale * 10000
+        
         # Generate realistic data
-        print("\nGenerating realistic flight schedules...")
-        flights = loader.generate_realistic_flights(1000)
+        print(f"\nGenerating realistic flight schedules (target: {flights_count})...")
+        flights = loader.generate_realistic_flights(flights_count)
         print(f"Generated {len(flights)} flights based on real route data")
         
-        print("\nGenerating synthetic passengers...")
-        passengers = loader.generate_synthetic_passengers(10000)
+        print(f"\nGenerating synthetic passengers (target: {passengers_count})...")
+        passengers = loader.generate_synthetic_passengers(passengers_count)
         print(f"Generated {len(passengers)} passengers with synthetic data")
         
         print("\nGenerating booking patterns...")

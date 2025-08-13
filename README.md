@@ -49,28 +49,31 @@ The demo uses a dedicated `airline_demo` database to keep the demonstration isol
 # Make the runner executable
 chmod +x run-demo.sh
 
-# Run enhanced demo with real-world data
-./run-demo.sh enhanced
+# Run enhanced demo with real-world data (standard scale)
+./run-demo.sh --method enhanced
+
+# OR run with 5x scale for performance testing
+./run-demo.sh --method enhanced --scale 5
 
 # OR run self-contained SQL demo
-./run-demo.sh sql-only
+./run-demo.sh --method sql-only
 
-# OR generate CSV files
-./run-demo.sh csv
+# OR generate CSV files at custom scale
+./run-demo.sh --method csv --scale 10
 
 # Clean up generated files
-./run-demo.sh clean
+./run-demo.sh --method clean
 ```
 
 ### Manual Methods
 
-#### Method 1: Enhanced Realistic Data
+#### Method 1: Enhanced Realistic Data with Scaling
 ```bash
 # Install required packages
 pip install -r requirements.txt
 
-# Generate data from real-world sources
-python enhanced-data-loader.py
+# Generate data from real-world sources with custom scale
+python enhanced-data-loader.py --scale 5
 
 # Connect to Apache Cloudberry and create schema
 # For gpdemo: psql -h localhost -p 7000 -d airline_demo
@@ -95,10 +98,10 @@ psql -h localhost -p 7000 -d airline_demo
 \i airline-reservations-demo.sql
 ```
 
-#### Method 3: Basic CSV Generation
+#### Method 3: Basic CSV Generation with Scaling
 ```bash
-# Generate simple CSV files
-python data-generator.py
+# Generate CSV files with custom scale
+python data-generator.py --scale 10
 
 # Load data into Cloudberry
 # For gpdemo: psql -h localhost -p 7000 -d airline_demo
@@ -125,8 +128,9 @@ export CLOUDBERRY_USER=cbadmin  # or your system username
 # Create the database (first time only)
 psql -d postgres -c "CREATE DATABASE airline_demo;"
 
-# Then run demo
-./run-demo.sh enhanced
+# Then run demo with optional scaling
+./run-demo.sh --method enhanced
+./run-demo.sh --method enhanced --scale 5
 ```
 
 #### For Production/Custom Cloudberry Installation
@@ -137,14 +141,61 @@ export CLOUDBERRY_PORT=5432
 export CLOUDBERRY_DB=your-database
 export CLOUDBERRY_USER=your-user
 
-# Then run demo
-./run-demo.sh enhanced
+# Then run demo with optional scaling
+./run-demo.sh --method enhanced
+./run-demo.sh --method enhanced --scale 25
 ```
 
 #### Quick Start with gpdemo
 ```bash
 # Create database and run demo in one command
-source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && psql -d postgres -c "CREATE DATABASE airline_demo;" && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh enhanced
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && psql -d postgres -c "CREATE DATABASE airline_demo;" && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced
+
+# Or with scaling for performance testing
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced --scale 10
+```
+
+## Command-Line Interface
+
+The `run-demo.sh` script provides a modern CLI with named parameters and flexible scaling options.
+
+### Usage Syntax
+```bash
+./run-demo.sh [OPTIONS]
+
+OPTIONS:
+  -m, --method METHOD    Demo method (required)
+  -s, --scale SCALE      Scale factor (optional, default: 1)  
+  -h, --help             Show help message
+```
+
+### Available Methods
+- **`enhanced`** - Generate realistic data from OpenFlights + Faker (recommended)
+- **`sql-only`** - Run self-contained SQL demo with embedded data generation
+- **`csv`** - Generate CSV files for manual loading
+- **`clean`** - Remove generated files
+
+### Scale Factor Options
+- **`1`** - Standard demo (10K passengers, 1K flights, ~28K bookings)
+- **`5`** - Medium scale (50K passengers, 5K flights, ~125K bookings)
+- **`25`** - Large scale (250K passengers, 25K flights, ~625K bookings)
+- **`100`** - Enterprise scale (1M passengers, 100K flights, ~2.5M bookings)
+
+### Examples
+```bash
+# Standard demos
+./run-demo.sh --method enhanced
+./run-demo.sh -m sql-only
+./run-demo.sh -m clean
+
+# Scaled demos for performance testing
+./run-demo.sh --method enhanced --scale 5
+./run-demo.sh -m csv -s 10
+./run-demo.sh --method enhanced -s 100
+
+# Environment variable override
+DEMO_SCALE=15 ./run-demo.sh --method enhanced
+CLOUDBERRY_HOST=myhost ./run-demo.sh -m enhanced -s 5
 ```
 
 ## Key Demonstrations

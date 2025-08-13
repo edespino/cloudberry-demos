@@ -184,7 +184,10 @@ psql -d postgres -c "SELECT version();"
 psql -d postgres -c "CREATE DATABASE airline_demo;"
 
 # Run demo with correct settings
-source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh enhanced
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced
+
+# Or with scaling for performance testing
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced --scale 5
 ```
 
 ## ORCA Optimizer Guidance for Claude
