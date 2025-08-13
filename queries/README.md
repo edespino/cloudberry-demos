@@ -76,7 +76,7 @@ psql -h localhost -p 5432 -d airline_demo  # production
 **Best For**: Business analytics, operational insights, strategic planning
 
 ### 🎯 **06-orca-optimizer.sql** - ORCA Optimizer Control
-**Purpose**: Demonstrate ORCA optimizer features and controls  
+**Purpose**: Demonstrate Apache Cloudberry's native ORCA optimizer features  
 **Key Features**:
 - ORCA vs PostgreSQL planner comparison
 - Motion operations analysis and statistics quality
@@ -84,7 +84,18 @@ psql -h localhost -p 5432 -d airline_demo  # production
 - Segment distribution analysis
 - Configuration settings and statistics
 
-**Best For**: Performance tuning, troubleshooting specific queries
+**Best For**: Understanding ORCA behavior, natural optimization approach
+
+### 🎯 **06-pg-hint-plan.sql** - Query Hint Control  
+**Purpose**: Manual query optimization using pg_hint_plan extension
+**Key Features**:
+- Extension installation and configuration validation
+- Before/after execution plan comparisons
+- Join method control (HashJoin, NestLoop)
+- Join order control with Leading hints
+- Comprehensive setup instructions with gpconfig
+
+**Best For**: Manual query tuning, forcing specific execution plans, troubleshooting
 
 ### 🔧 **07-troubleshooting.sql** - Diagnostics & Health
 **Purpose**: Diagnose issues and monitor system health  
@@ -120,7 +131,8 @@ psql -h localhost -p 5432 -d airline_demo  # production
 \i queries/04-performance-analysis.sql
 
 # Test optimization techniques
-\i queries/06-orca-optimizer.sql
+\i queries/06-orca-optimizer.sql     # Natural ORCA optimization
+\i queries/06-pg-hint-plan.sql       # Manual hint-based optimization
 ```
 
 ### For Business Analytics:

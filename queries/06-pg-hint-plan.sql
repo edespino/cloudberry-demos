@@ -7,13 +7,48 @@
 \echo 'pg_hint_plan Extension Demonstrations'
 \echo '====================================='
 
--- Install pg_hint_plan extension if not already available
-\echo 'Installing pg_hint_plan extension:'
+-- First check if pg_hint_plan is in shared_preload_libraries
+\echo 'Checking pg_hint_plan configuration:'
+\echo 'Step 1: Verify shared_preload_libraries includes pg_hint_plan'
+SELECT 
+    name,
+    setting,
+    CASE 
+        WHEN setting LIKE '%pg_hint_plan%' THEN 'CONFIGURED ✓'
+        ELSE 'NOT CONFIGURED - needs: gpconfig -c shared_preload_libraries -v pg_hint_plan'
+    END as status
+FROM pg_settings 
+WHERE name = 'shared_preload_libraries';
+
+\echo ''
+\echo 'Step 2: Installing pg_hint_plan extension:'
 CREATE EXTENSION IF NOT EXISTS pg_hint_plan;
 
 -- Check if pg_hint_plan is now available
-\echo 'Checking pg_hint_plan availability:'
-SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_hint_plan';
+\echo ''
+\echo 'Step 3: Checking pg_hint_plan extension availability:'
+SELECT extname, extversion,
+       CASE 
+           WHEN extname IS NOT NULL THEN 'EXTENSION INSTALLED ✓'
+           ELSE 'EXTENSION FAILED - check shared_preload_libraries'
+       END as install_status
+FROM pg_extension WHERE extname = 'pg_hint_plan'
+UNION ALL
+SELECT 'pg_hint_plan', 'not found', 'EXTENSION NOT INSTALLED ✗'
+WHERE NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_hint_plan');
+
+\echo ''
+\echo 'If pg_hint_plan is not configured, run these commands as gpadmin:'
+\echo '1. gpconfig -c shared_preload_libraries -v pg_hint_plan'
+\echo '2. gpstop -r  (restart cluster)'  
+\echo '3. Re-run this demo to install the extension'
+\echo ''
+\echo 'Alternative: Add to existing shared_preload_libraries:'
+\echo 'gpconfig -c shared_preload_libraries -v "existing_libs,pg_hint_plan"'
+\echo ''
+\echo 'Current cluster configuration check:'
+\echo 'To verify current gpconfig settings run:'
+\echo '  gpconfig -s shared_preload_libraries'
 
 \echo ''
 \echo 'Hint Examples - Join Methods:'
@@ -94,13 +129,29 @@ JOIN passenger p ON b.passenger_id = p.passenger_id;
 \echo '==================='
 
 -- Force specific scan methods
-\echo 'Sequential scan hint:'
+\echo 'Sequential scan demonstration:'
+\echo 'SQL: SELECT * FROM flights f WHERE f.origin = ''LAX'';'
+\echo ''
+\echo 'WITHOUT hint (ORCA chooses optimal scan method):'
+EXPLAIN (COSTS OFF)
+SELECT * FROM flights f WHERE f.origin = 'LAX';
+
+\echo ''
+\echo 'WITH SeqScan hint /*+ SeqScan(f) */ - forces sequential scan:'
 /*+ SeqScan(f) */
 EXPLAIN (COSTS OFF)
 SELECT * FROM flights f WHERE f.origin = 'LAX';
 
 \echo ''
-\echo 'Index scan hint (if indexes exist):'
+\echo 'Index scan demonstration (using primary key lookup):'
+\echo 'SQL: SELECT * FROM flights f WHERE f.flight_id = 100;'
+\echo ''
+\echo 'WITHOUT hint (ORCA chooses optimal scan for exact match):'
+EXPLAIN (COSTS OFF)
+SELECT * FROM flights f WHERE f.flight_id = 100;
+
+\echo ''
+\echo 'WITH IndexScan hint /*+ IndexScan(f) */ - forces index scan:'
 /*+ IndexScan(f) */
 EXPLAIN (COSTS OFF)
 SELECT * FROM flights f WHERE f.flight_id = 100;
