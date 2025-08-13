@@ -151,7 +151,7 @@ psql -d postgres -c "CREATE DATABASE airline_demo;"
 
 # Then run demo with optional scaling
 ./run-demo.sh --method enhanced
-./run-demo.sh --method enhanced --scale 5
+./run-demo.sh --method enhanced --scale 5 --yes  # Automated
 ```
 
 #### For Production/Custom Cloudberry Installation
@@ -164,7 +164,7 @@ export CLOUDBERRY_USER=your-user
 
 # Then run demo with optional scaling
 ./run-demo.sh --method enhanced
-./run-demo.sh --method enhanced --scale 25
+./run-demo.sh --method enhanced --scale 25 --yes  # Automated
 ```
 
 #### Quick Start with gpdemo
@@ -172,8 +172,8 @@ export CLOUDBERRY_USER=your-user
 # Create database and run demo in one command
 source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && psql -d postgres -c "CREATE DATABASE airline_demo;" && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced
 
-# Or with scaling for performance testing
-source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced --scale 10
+# Automated execution for performance testing
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced --scale 10 --yes
 ```
 
 ## Command-Line Interface
@@ -186,7 +186,8 @@ The `run-demo.sh` script provides a modern CLI with named parameters and flexibl
 
 OPTIONS:
   -m, --method METHOD    Demo method (required)
-  -s, --scale SCALE      Scale factor (optional, default: 1)  
+  -s, --scale SCALE      Scale factor (optional, default: 1)
+  -y, --yes              Skip confirmation prompts (optional)  
   -h, --help             Show help message
 ```
 
@@ -203,20 +204,54 @@ OPTIONS:
 - **`100`** - Enterprise scale (1M passengers, 100K flights, ~2.5M bookings)
 
 ### Examples
+
+#### Interactive Mode (Default)
 ```bash
-# Standard demos
+# Standard demos with confirmation prompts
 ./run-demo.sh --method enhanced
-./run-demo.sh -m sql-only
-./run-demo.sh -m clean
+./run-demo.sh -m enhanced --scale 5
+./run-demo.sh --method sql-only -s 25
+```
 
-# Scaled demos for performance testing
-./run-demo.sh --method enhanced --scale 5
-./run-demo.sh -m csv -s 10
-./run-demo.sh --method enhanced -s 100
+#### Automated Mode (No Prompts)
+```bash
+# Automated execution - perfect for scripting
+./run-demo.sh --method enhanced --yes
+./run-demo.sh -m enhanced -s 5 --yes
+./run-demo.sh --method sql-only -s 25 -y
+./run-demo.sh -m csv --scale 10 --yes
+```
 
-# Environment variable override
-DEMO_SCALE=15 ./run-demo.sh --method enhanced
-CLOUDBERRY_HOST=myhost ./run-demo.sh -m enhanced -s 5
+#### Advanced Usage
+```bash
+# Environment variable override with automation
+DEMO_SCALE=15 ./run-demo.sh --method enhanced --yes
+CLOUDBERRY_HOST=myhost ./run-demo.sh -m enhanced -s 5 -y
+
+# CI/CD pipeline friendly
+./run-demo.sh -m enhanced -s 100 --yes  # Enterprise scale, automated
+```
+
+### Automation Benefits
+
+The `--yes/-y` flag makes the demo perfect for:
+
+- **🤖 CI/CD Pipelines**: Automated testing without manual intervention
+- **📋 Scripted Demos**: Batch processing multiple demo scenarios
+- **⚡ Performance Testing**: Rapid iteration with different scale factors
+- **🔄 Automated Benchmarking**: Consistent execution for performance comparisons
+- **⏱️ Time Saving**: No waiting for user confirmation in automated environments
+
+#### Example: Automated Performance Testing
+```bash
+#!/bin/bash
+# Test multiple scales automatically
+for scale in 1 5 10 25; do
+    echo "Testing scale: ${scale}x"
+    ./run-demo.sh -m enhanced -s $scale --yes
+    # Add your performance measurement logic here
+    ./run-demo.sh -m clean --yes  # Clean between runs
+done
 ```
 
 ## Ready-to-Run Query Collections
@@ -224,7 +259,12 @@ CLOUDBERRY_HOST=myhost ./run-demo.sh -m enhanced -s 5
 The `queries/` directory contains comprehensive SQL demonstrations organized by feature area. Each file includes detailed examples with explanations and can be run directly in your Apache Cloudberry environment.
 
 ### 🚀 Quick Query Access
+
+#### Interactive Setup
 ```bash
+# Set up demo data first (interactive mode)
+./run-demo.sh --method enhanced --scale 5
+
 # Connect to your demo database
 psql -h localhost -p 7000 -d airline_demo  # gpdemo
 psql -h localhost -p 5432 -d airline_demo  # production
@@ -233,6 +273,16 @@ psql -h localhost -p 5432 -d airline_demo  # production
 \i queries/01-mpp-joins.sql
 \i queries/02-window-functions.sql
 \i queries/05-advanced-analytics.sql
+```
+
+#### Automated Setup
+```bash
+# Automated demo setup for CI/CD or scripting
+./run-demo.sh --method enhanced --scale 10 --yes
+
+# Connect and run query collections
+psql -d airline_demo -f queries/04-performance-analysis.sql
+psql -d airline_demo -f queries/07-troubleshooting.sql
 ```
 
 ### 📁 Query Collections

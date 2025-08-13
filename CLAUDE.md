@@ -186,8 +186,8 @@ psql -d postgres -c "CREATE DATABASE airline_demo;"
 # Run demo with correct settings
 source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced
 
-# Or with scaling for performance testing
-source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced --scale 5
+# Automated execution (no prompts) for CI/CD or scripting
+source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh --method enhanced --scale 5 --yes
 ```
 
 ## ORCA Optimizer Guidance for Claude
@@ -228,6 +228,38 @@ SET optimizer = off;  -- PostgreSQL planner (for comparison)
 - **Performance issues**: First check ANALYZE, then schema design
 - **Manual tuning**: Focus on data distribution and query structure, not optimizer hints
 
+## Automation and CI/CD Integration
+
+### Automated Execution
+The demo now supports fully automated execution with the `--yes/-y` flag:
+- **Interactive Mode**: Default behavior with confirmation prompts
+- **Automated Mode**: Skip all prompts for CI/CD and scripting environments
+- **Perfect for**: Performance testing, benchmarking, automated validation
+
+### Best Practices for Automation
+```bash
+# Environment setup for automation
+export CLOUDBERRY_PORT=7000
+export CLOUDBERRY_DB=airline_demo  
+export CLOUDBERRY_USER=cbadmin
+
+# Automated demo execution
+./run-demo.sh --method enhanced --scale 5 --yes
+
+# Performance testing loop
+for scale in 1 5 10 25; do
+    ./run-demo.sh -m enhanced -s $scale --yes
+    # Add performance measurement logic
+    ./run-demo.sh -m clean --yes  # Clean between runs
+done
+```
+
+### CI/CD Integration Examples
+- **Continuous Testing**: Automated regression testing with different scales
+- **Performance Monitoring**: Regular benchmarking in staging environments
+- **Demo Validation**: Ensure demo works across different deployments
+- **Documentation Testing**: Verify all examples work as documented
+
 ## Notes for Claude
 - This demo showcases **defensive** database technology for analytics
 - All code is educational and demonstrates legitimate MPP database concepts
@@ -236,6 +268,7 @@ SET optimizer = off;  -- PostgreSQL planner (for comparison)
 - Encourage exploration of query optimization and performance tuning
 - Always verify Cloudberry environment setup before troubleshooting demo issues
 - **ORCA optimization**: Emphasize ANALYZE and schema design over manual controls
+- **Automation support**: Use `--yes` flag for scripted or CI/CD environments
 
 ---
 

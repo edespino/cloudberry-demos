@@ -46,6 +46,7 @@ print_usage() {
     echo "OPTIONS:"
     echo "  -m, --method METHOD    Demo method (required)"
     echo "  -s, --scale SCALE      Scale factor (optional, default: 1)"
+    echo "  -y, --yes              Skip confirmation prompts (optional)"
     echo "  -h, --help             Show this help message"
     echo ""
     echo "Available methods:"
@@ -70,11 +71,12 @@ print_usage() {
     echo "Examples:"
     echo "  $0 --method enhanced                          # Standard demo"
     echo "  $0 -m enhanced --scale 5                      # 5x scale for performance testing"
-    echo "  $0 --method sql-only -s 25                    # Large SQL demo"
-    echo "  $0 -m csv --scale 10                          # Generate CSV at 10x scale"
-    echo "  $0 --method enhanced -s 100                   # Enterprise scale demo"
-    echo "  DEMO_SCALE=15 $0 --method enhanced            # Environment override"
-    echo "  CLOUDBERRY_HOST=myhost $0 -m enhanced -s 5    # Remote with scaling"
+    echo "  $0 --method enhanced --yes                    # Skip confirmation prompts"
+    echo "  $0 -m enhanced -s 5 --yes                     # Automated execution with scaling"
+    echo "  $0 --method sql-only -s 25 -y                 # Large SQL demo, automated"
+    echo "  $0 -m csv --scale 10 --yes                    # Generate CSV at 10x scale, automated"
+    echo "  DEMO_SCALE=15 $0 --method enhanced --yes      # Environment override, automated"
+    echo "  CLOUDBERRY_HOST=myhost $0 -m enhanced -s 5 -y # Remote with scaling, automated"
     echo ""
 }
 
@@ -132,6 +134,7 @@ test_connection() {
 
 run_enhanced_demo() {
     local scale_factor=$1
+    local auto_yes=$2
     echo -e "${GREEN}Running Enhanced Demo with OpenFlights Data (Scale: ${scale_factor}x)${NC}"
     echo "This will:"
     echo "1. Download real airport/route data from OpenFlights.org"
@@ -142,11 +145,15 @@ run_enhanced_demo() {
     echo "Data scale: $((scale_factor * 10))K passengers, $((scale_factor * 1))K flights, ~$((scale_factor * 28))K bookings"
     echo ""
     
-    read -p "Continue? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        echo "Demo cancelled."
-        exit 0
+    if [ "$auto_yes" != "true" ]; then
+        read -p "Continue? [Y/n] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo "Demo cancelled."
+            exit 0
+        fi
+    else
+        echo "Auto-confirming: Yes"
     fi
     
     # Generate enhanced data with scale factor
@@ -195,17 +202,22 @@ run_enhanced_demo() {
 
 run_sql_demo() {
     local scale_factor=$1
+    local auto_yes=$2
     echo -e "${GREEN}Running Self-Contained SQL Demo (Scale: ${scale_factor}x)${NC}"
     echo "This will run the complete demo with embedded data generation."
     echo ""
     echo "Data scale: $((scale_factor * 10))K passengers, ~$((scale_factor * 1))K flights"
     echo ""
     
-    read -p "Continue? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        echo "Demo cancelled."
-        exit 0
+    if [ "$auto_yes" != "true" ]; then
+        read -p "Continue? [Y/n] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo "Demo cancelled."
+            exit 0
+        fi
+    else
+        echo "Auto-confirming: Yes"
     fi
     
     # Create a temporary SQL file with scaled parameters
@@ -229,6 +241,7 @@ run_sql_demo() {
 
 generate_csv() {
     local scale_factor=$1
+    local auto_yes=$2
     echo -e "${GREEN}Generating CSV Files (Scale: ${scale_factor}x)${NC}"
     echo "This will create CSV files that you can load manually."
     echo ""
@@ -271,6 +284,7 @@ main() {
     # Parse named arguments
     local method=""
     local scale_factor="${DEMO_SCALE:-1}"
+    local auto_yes=false
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -289,6 +303,10 @@ main() {
                 fi
                 scale_factor="$2"
                 shift 2
+                ;;
+            -y|--yes)
+                auto_yes=true
+                shift
                 ;;
             -h|--help)
                 print_usage
@@ -322,16 +340,16 @@ main() {
         "enhanced")
             check_dependencies enhanced
             test_connection
-            run_enhanced_demo "$scale_factor"
+            run_enhanced_demo "$scale_factor" "$auto_yes"
             ;;
         "sql-only")
             check_dependencies sql-only
             test_connection
-            run_sql_demo "$scale_factor"
+            run_sql_demo "$scale_factor" "$auto_yes"
             ;;
         "csv")
             check_dependencies csv
-            generate_csv "$scale_factor"
+            generate_csv "$scale_factor" "$auto_yes"
             ;;
         "clean")
             clean_files
