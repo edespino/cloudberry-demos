@@ -187,6 +187,44 @@ psql -d postgres -c "CREATE DATABASE airline_demo;"
 source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBERRY_DB=airline_demo CLOUDBERRY_USER=cbadmin ./run-demo.sh enhanced
 ```
 
+## ORCA Optimizer Guidance for Claude
+
+### Validated Best Practices
+**What Works with ORCA:**
+1. **ANALYZE is critical** - ORCA relies heavily on accurate statistics
+2. **Schema design matters** - Distribution keys, compression, storage format
+3. **Query structure optimization** - Clear joins, early filtering, proper GROUP BY
+4. **Trust ORCA's decisions** - Advanced cost-based optimizer usually chooses optimally
+
+**What Doesn't Work:**
+1. **Manual optimizer hints** - `enable_hashjoin=off` largely ignored by ORCA
+2. **PostgreSQL-style tuning** - Traditional hint methods don't apply
+3. **Forcing execution plans** - ORCA overrides manual controls with cost-based decisions
+
+### Troubleshooting Query Performance
+**Step 1: Check Statistics**
+```sql
+ANALYZE table_name;
+SELECT last_analyze FROM pg_stat_user_tables WHERE relname = 'table_name';
+```
+
+**Step 2: Compare Optimizers**
+```sql
+SET optimizer = on;   -- ORCA (test first)
+SET optimizer = off;  -- PostgreSQL planner (for comparison)
+```
+
+**Step 3: Analyze Execution Plans**
+- Look for appropriate Motion operations (Broadcast vs Redistribute)
+- Check slice allocation and memory usage
+- Verify row estimates are realistic
+
+### When to Recommend What
+- **Complex analytics**: Always recommend ORCA
+- **Simple OLTP queries**: Either optimizer works well
+- **Performance issues**: First check ANALYZE, then schema design
+- **Manual tuning**: Focus on data distribution and query structure, not optimizer hints
+
 ## Notes for Claude
 - This demo showcases **defensive** database technology for analytics
 - All code is educational and demonstrates legitimate MPP database concepts
@@ -194,6 +232,7 @@ source ../cloudberry/gpAux/gpdemo/gpdemo-env.sh && CLOUDBERRY_PORT=7000 CLOUDBER
 - Focus on helping users understand Apache Cloudberry's capabilities
 - Encourage exploration of query optimization and performance tuning
 - Always verify Cloudberry environment setup before troubleshooting demo issues
+- **ORCA optimization**: Emphasize ANALYZE and schema design over manual controls
 
 ---
 
