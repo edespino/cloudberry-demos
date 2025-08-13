@@ -258,30 +258,44 @@ ORDER BY bookings DESC, booking_premium_factor DESC;
 
 \echo ''
 \echo 'Example 4: Advanced window functions - ORCA analytical strength'  
-\echo 'SQL: Passenger journey analysis with rankings'
+\echo 'SQL: Passenger journey analysis with rankings using CTE'
 EXPLAIN (ANALYZE OFF, COSTS OFF)
+WITH passenger_trips AS (
+    SELECT 
+        p.passenger_id,
+        p.first_name || ' ' || p.last_name as passenger_name,
+        f.origin,
+        f.destination,
+        f.departure_time,
+        b.booking_date,
+        EXTRACT(days FROM (f.departure_time - b.booking_date)) as lead_days,
+        ROW_NUMBER() OVER (PARTITION BY p.passenger_id ORDER BY f.departure_time) as trip_sequence,
+        LAG(f.destination) OVER (PARTITION BY p.passenger_id ORDER BY f.departure_time) as previous_destination,
+        COUNT(*) OVER (PARTITION BY p.passenger_id) as total_trips
+    FROM passenger p
+    JOIN booking b ON p.passenger_id = b.passenger_id
+    JOIN flights f ON b.flight_id = f.flight_id
+    WHERE p.passenger_id <= 1000  -- Limit for demo purposes
+)
 SELECT 
-    p.passenger_id,
-    p.first_name || ' ' || p.last_name as passenger_name,
-    f.origin,
-    f.destination,
-    f.departure_time,
-    b.booking_date,
-    EXTRACT(days FROM (f.departure_time - b.booking_date)) as lead_days,
-    ROW_NUMBER() OVER (PARTITION BY p.passenger_id ORDER BY f.departure_time) as trip_sequence,
-    LAG(f.destination) OVER (PARTITION BY p.passenger_id ORDER BY f.departure_time) as previous_destination,
+    passenger_id,
+    passenger_name,
+    origin,
+    destination,
+    departure_time,
+    booking_date,
+    lead_days,
+    trip_sequence,
+    previous_destination,
     CASE 
-        WHEN LAG(f.destination) OVER (PARTITION BY p.passenger_id ORDER BY f.departure_time) = f.origin 
+        WHEN previous_destination = origin 
         THEN 'CONNECTING_FLIGHT'
         ELSE 'NEW_JOURNEY'
     END as trip_type,
-    COUNT(*) OVER (PARTITION BY p.passenger_id) as total_trips,
-    RANK() OVER (ORDER BY COUNT(*) OVER (PARTITION BY p.passenger_id) DESC) as passenger_activity_rank
-FROM passenger p
-JOIN booking b ON p.passenger_id = b.passenger_id
-JOIN flights f ON b.flight_id = f.flight_id
-WHERE p.passenger_id <= 1000  -- Limit for demo purposes
-ORDER BY passenger_activity_rank, p.passenger_id, trip_sequence;
+    total_trips,
+    RANK() OVER (ORDER BY total_trips DESC) as passenger_activity_rank
+FROM passenger_trips
+ORDER BY passenger_activity_rank, passenger_id, trip_sequence;
 
 \echo ''
 \echo 'Example 5: ORCA vs PostgreSQL planner comparison on complex query'
