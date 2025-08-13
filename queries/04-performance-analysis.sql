@@ -9,6 +9,8 @@
 
 \echo 'Table Row Counts:'
 \echo '================='
+\echo 'SQL: SELECT table_name, COUNT(*) as row_count FROM (passenger UNION flights UNION booking) ORDER BY table_name;'
+\echo ''
 
 -- Basic table row counts
 SELECT 'passenger' as table_name, COUNT(*) as row_count FROM passenger
@@ -21,6 +23,9 @@ ORDER BY table_name;
 \echo ''
 \echo 'Table Statistics and Maintenance:'
 \echo '================================='
+\echo 'SQL: SELECT schemaname, relname as tablename, n_tup_ins, n_tup_upd, n_tup_del, last_analyze, analyze_count'
+\echo '     FROM pg_stat_user_tables WHERE schemaname = ''public'' ORDER BY relname;'
+\echo ''
 
 -- Check table statistics (simplified for Cloudberry compatibility)
 SELECT 
@@ -41,6 +46,7 @@ ORDER BY relname;
 
 -- Check data distribution for each table
 \echo 'Booking table distribution:'
+\echo 'SQL: SELECT gp_segment_id, count(*) as row_count FROM gp_dist_random(''booking'') GROUP BY gp_segment_id ORDER BY gp_segment_id;'
 SELECT gp_segment_id, count(*) as row_count
 FROM gp_dist_random('booking') 
 GROUP BY gp_segment_id 
@@ -48,6 +54,7 @@ ORDER BY gp_segment_id;
 
 \echo ''
 \echo 'Flights table distribution:'
+\echo 'SQL: SELECT gp_segment_id, count(*) as row_count FROM gp_dist_random(''flights'') GROUP BY gp_segment_id ORDER BY gp_segment_id;'
 SELECT gp_segment_id, count(*) as row_count
 FROM gp_dist_random('flights') 
 GROUP BY gp_segment_id 
@@ -55,6 +62,7 @@ ORDER BY gp_segment_id;
 
 \echo ''
 \echo 'Passenger table distribution:'
+\echo 'SQL: SELECT gp_segment_id, count(*) as row_count FROM gp_dist_random(''passenger'') GROUP BY gp_segment_id ORDER BY gp_segment_id;'
 SELECT gp_segment_id, count(*) as row_count
 FROM gp_dist_random('passenger') 
 GROUP BY gp_segment_id 
@@ -63,6 +71,10 @@ ORDER BY gp_segment_id;
 \echo ''
 \echo 'Column Statistics Quality:'
 \echo '========================='
+\echo 'SQL: SELECT tablename, attname, n_distinct, correlation FROM pg_stats'
+\echo '     WHERE schemaname = ''public'' AND tablename IN (''passenger'', ''flights'', ''booking'')'
+\echo '     AND attname IN (''passenger_id'', ''flight_id'', ''booking_id'') ORDER BY tablename, attname;'
+\echo ''
 
 -- Check statistics quality for key columns (simplified for Cloudberry)
 SELECT tablename, attname, n_distinct, correlation
@@ -80,14 +92,18 @@ ORDER BY tablename, attname;
 \timing on
 
 \echo 'Simple count query:'
+\echo 'SQL: SELECT COUNT(*) FROM booking;'
 SELECT COUNT(*) FROM booking;
 
 \echo ''
 \echo 'Two-table join:'
+\echo 'SQL: SELECT COUNT(*) FROM booking b JOIN flights f ON b.flight_id = f.flight_id;'
 SELECT COUNT(*) FROM booking b JOIN flights f ON b.flight_id = f.flight_id;
 
 \echo ''
 \echo 'Three-table join with aggregation:'
+\echo 'SQL: SELECT COUNT(*), AVG(EXTRACT(epoch FROM f.arrival_time - f.departure_time)/3600) as avg_hours'
+\echo '     FROM booking b JOIN flights f ON b.flight_id = f.flight_id JOIN passenger p ON b.passenger_id = p.passenger_id;'
 SELECT COUNT(*), AVG(EXTRACT(epoch FROM f.arrival_time - f.departure_time)/3600) as avg_hours
 FROM booking b 
 JOIN flights f ON b.flight_id = f.flight_id 
@@ -95,6 +111,8 @@ JOIN passenger p ON b.passenger_id = p.passenger_id;
 
 \echo ''
 \echo 'Complex aggregation:'
+\echo 'SQL: SELECT f.origin, COUNT(*) as bookings, COUNT(DISTINCT b.passenger_id) as passengers'
+\echo '     FROM booking b JOIN flights f ON b.flight_id = f.flight_id GROUP BY f.origin ORDER BY COUNT(*) DESC LIMIT 10;'
 SELECT f.origin, COUNT(*) as bookings, COUNT(DISTINCT b.passenger_id) as passengers
 FROM booking b 
 JOIN flights f ON b.flight_id = f.flight_id 
@@ -107,6 +125,9 @@ LIMIT 10;
 \echo ''
 \echo 'Memory and Resource Usage:'
 \echo '=========================='
+\echo 'SQL: SELECT name, setting, unit, source FROM pg_settings'
+\echo '     WHERE name IN (''work_mem'', ''shared_buffers'', ''max_connections'', ''gp_vmem_protect_limit'') ORDER BY name;'
+\echo ''
 
 -- Show current resource settings
 SELECT name, setting, unit, source 
@@ -117,6 +138,9 @@ ORDER BY name;
 \echo ''
 \echo 'Compression Effectiveness:'
 \echo '========================='
+\echo 'SQL: SELECT tablename, pg_size_pretty(pg_total_relation_size(''public.''||tablename)) as compressed_size,'
+\echo '     estimated_uncompressed, compression_ratio FROM pg_tables WHERE schemaname = ''public'';'
+\echo ''
 
 -- Estimate compression ratios
 SELECT 
